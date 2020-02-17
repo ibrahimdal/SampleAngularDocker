@@ -1,0 +1,42 @@
+#Projeyi build ediyoruz.
+
+#Dev ortamındaki gibi base image olarak node u aldık.
+FROM node:12.2.0 as build
+
+#Dev ortamındaki gibi testleri çalıştırmak için chrome yüklüyoruz.
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
+RUN sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+RUN apt-get update && apt-get install -yq google-chrome-stable
+
+#Dev ortamındaki gibi /app klasörünü çalışma dizini olarak belirledik.
+WORKDIR /app
+
+#Dev ortamındaki gibi /app/node_modules/.bin container ın path ine yazdık.
+ENV PATH /app/node_modules/.bin:$PATH
+
+#Dev ortamındaki gibi projenin package dosyasını container a taşıdık ve bağımlılıkları yükledik.
+COPY package.json /app/package.json
+RUN npm install
+RUN npm install -g @angular/cli@7.3.9
+
+#Dev ortamındaki gibi projeyi container a taşıdık. (.Dockerignore dakiler hariç.)
+COPY . /app
+
+#testleri çalıştırdık.
+RUN ng test --watch=false
+RUN ng e2e --port 4202
+
+#ng build komutu ile publish dosyalarını oluşturduk. dist klasörü altına.
+RUN ng build --output-path=dist
+
+#uygulamamızı yayınlamamız için nginx i yükledik.
+FROM nginx:1.16.0-alpine
+
+# dosyaları nginx e kopyaladık.
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# nginx in 80 portunu dışarıya açtık.
+EXPOSE 80
+
+# nginx i çalıştırdık.
+CMD ["nginx", "-g", "daemon off;"]
